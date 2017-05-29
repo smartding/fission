@@ -50,8 +50,11 @@ import (
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 
+
 	"github.com/fission/fission/crd"
 	executorClient "github.com/fission/fission/executor/client"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 )
 
 // request url ---[mux]---> Function(name,uid) ----[fmap]----> k8s service url
@@ -71,8 +74,17 @@ func serve(ctx context.Context, port int, httpTriggerSet *HTTPTriggerSet, resolv
 	http.ListenAndServe(url, handlers.LoggingHandler(os.Stdout, mr))
 }
 
+
+func serveMetric() {
+	// Expose the registered metrics via HTTP.
+	http.Handle("/metrics", promhttp.Handler())
+	log.Fatal(http.ListenAndServe(metricAddr, nil))
+}
+
 func Start(port int, executorUrl string) {
+
 	fmap := makeFunctionServiceMap(time.Minute)
+
 
 	fissionClient, _, _, err := crd.MakeFissionClient()
 	if err != nil {
@@ -84,6 +96,9 @@ func Start(port int, executorUrl string) {
 	executor := executorClient.MakeClient(executorUrl)
 	triggers, _, fnStore := makeHTTPTriggerSet(fmap, fissionClient, executor, restClient)
 	resolver := makeFunctionReferenceResolver(fnStore)
+
+
+	go serveMetric()
 
 	log.Printf("Starting router at port %v\n", port)
 	ctx, cancel := context.WithCancel(context.Background())
