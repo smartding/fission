@@ -101,7 +101,7 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	// System Params
 	MetadataToHeaders(HEADERS_FISSION_FUNCTION_PREFIX, fh.function, request)
 
-	metricCold := "false"
+	metricCached := "true"
 	metricPath := request.URL.Path
 
 	// cache lookup
@@ -109,9 +109,9 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 	if err != nil {
 		// Cache miss: request the Pool Manager to make a new service.
 
-		log.Printf("Not cached, getting new service for %v", fh.function)
-		metricCold = "true"
 
+		log.Printf("Not cached, getting new service for %v", fh.function)
+		metricCached = "false"
 
 		var poolErr error
 		serviceUrl, poolErr = fh.getServiceForFunction()
@@ -183,12 +183,12 @@ func (fh *functionHandler) handler(responseWriter http.ResponseWriter, request *
 
 	metricStatus := fmt.Sprint(wrapper.Status())
 
-	increaseHttpCalls(metricCold, fh.function.Name, fh.function.UID,
+	increaseHttpCalls(metricCached, fh.function.Name, fh.function.UID,
 		metricPath, metricStatus, request.Method)
-	observeHttpCallDelay(metricCold, fh.function.Name, fh.function.UID,
+	observeHttpCallDelay(metricCached, fh.function.Name, fh.function.UID,
 		metricPath, metricStatus, request.Method, float64(delay.Nanoseconds())/10e9)
-	observeHttpCallLatency(metricCold, fh.function.Name, fh.function.UID,
+	observeHttpCallLatency(metricCached, fh.function.Name, fh.function.UID,
 		metricPath, metricStatus, request.Method, float64(latency.Nanoseconds())/10e9)
-	observeHttpCallResponseSize(metricCold, fh.function.Name, fh.function.UID,
+	observeHttpCallResponseSize(metricCached, fh.function.Name, fh.function.UID,
 		metricPath, metricStatus, request.Method, float64(wrapper.ResponseSize()))
 }
