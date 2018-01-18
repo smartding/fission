@@ -76,6 +76,7 @@ func (executor *Executor) getServiceForFunction(m *metav1.ObjectMeta) (string, e
 	if resp.err != nil {
 		return "", resp.err
 	}
+	increaseColdStarts(m.Name, m.UID)
 	return resp.funcSvc.Address, resp.err
 }
 
