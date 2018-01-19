@@ -166,6 +166,7 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (error, *FuncSvc) {
 		log.Printf("error caching fsvc: %v", err)
 		return err, nil
 	}
+	fsc.setFuncAlive(fsvc.Function.Name, string(fsvc.Function.UID), true)
 	return nil, nil
 }
 
@@ -202,6 +203,9 @@ func (fsc *FunctionServiceCache) DeleteOld(fsvc *FuncSvc, minAge time.Duration) 
 
 	fsc.byFunction.Delete(crd.CacheKey(fsvc.Function))
 	fsc.byAddress.Delete(fsvc.Address)
+	fsc.observeFuncRunningTime(fsvc.Function.Name, string(fsvc.Function.UID), fsvc.Atime.Sub(fsvc.Ctime).Seconds())
+	fsc.observeFuncAliveTime(fsvc.Function.Name, string(fsvc.Function.UID), time.Now().Sub(fsvc.Ctime).Seconds())
+	fsc.setFuncAlive(fsvc.Function.Name, string(fsvc.Function.UID), false)
 
 	return true, nil
 }
