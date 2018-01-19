@@ -18,11 +18,13 @@ package executor
 
 import (
 	"log"
+	"net/http"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/dchest/uniuri"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/cache"
@@ -171,6 +173,12 @@ func (executor *Executor) getFunctionEnv(m *metav1.ObjectMeta) (*crd.Environment
 	return env, nil
 }
 
+func serveMetric() {
+	// Expose the registered metrics via HTTP.
+	http.Handle("/metrics", promhttp.Handler())
+	log.Fatal(http.ListenAndServe(metricAddr, nil))
+}
+
 // StartExecutor Starts executor and the backend components that executor uses such as Poolmgr,
 // deploymgr and potential future backends
 func StartExecutor(fissionNamespace string, functionNamespace string, port int) error {
@@ -190,6 +198,7 @@ func StartExecutor(fissionNamespace string, functionNamespace string, port int) 
 
 	api := MakeExecutor(gpm, fissionClient, fsCache)
 	go api.Serve(port)
+	go serveMetric()
 
 	return nil
 }
