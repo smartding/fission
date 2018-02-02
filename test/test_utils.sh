@@ -192,15 +192,28 @@ wait_for_service() {
     svc=$2
 
     ns=f-$id
+    retry=0
+    max_retries=5
     while true
     do
-	ip=$(kubectl -n $ns get svc $svc -o jsonpath='{...ip}')
-	if [ ! -z $ip ]
-	then
-	    break
-	fi
-	echo Waiting for service $svc...
-	sleep 1
+        retry=$((retry+1))
+        if ((retry == max_retries)); then
+            echo "Waiting for $svc to be routable exceeded max retries. Quitting.."
+            exit 1
+        fi
+        ip=$(kubectl -n $ns get svc $svc -o jsonpath='{...ip}')
+        if [ -z $ip ]; then
+            continue
+        fi
+        echo "Debug : ip for $svc : $ip"
+        http_status=`curl -sw "%{http_code}" "http://$ip/"`
+        echo "Debug : http_status for svc $svc : $http_status"
+        if [ "$http_status" -ne "200" ]; then
+            echo "Service $svc returned response other than 200. waiting for 200 after backing off for 1 second"
+            sleep 1
+        else
+            break
+        fi
     done
 }
 
@@ -210,8 +223,7 @@ wait_for_services() {
     wait_for_service $id controller
     wait_for_service $id router
 
-    echo Waiting for service is routable...
-    sleep 10
+    echo "Controller and router services are routable"
 }
 
 helm_uninstall_fission() {(set +e
