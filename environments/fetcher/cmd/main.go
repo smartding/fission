@@ -1,10 +1,10 @@
 package main
 
 import (
-	"log"
 	"net/http"
 	"os"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/fission/fission/environments/fetcher"
 )
 
@@ -19,12 +19,17 @@ func main() {
 			}
 		}
 	}
-	fetcher := fetcher.MakeFetcher(dir)
+	fetcherInstance, err := fetcher.MakeFetcher(dir)
+	if err != nil {
+		log.Fatalf("Error making fetcher: %v", err)
+	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", fetcher.FetchHandler)
-	mux.HandleFunc("/upload", fetcher.UploadHandler)
+	mux.HandleFunc("/", fetcherInstance.FetchHandler)
+	mux.HandleFunc("/upload", fetcherInstance.UploadHandler)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
+
+	log.Infof("Fetcher is ready to receive requests")
 	http.ListenAndServe(":8000", mux)
 }

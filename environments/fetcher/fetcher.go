@@ -60,15 +60,15 @@ const (
 	FETCH_URL // remove this?
 )
 
-func MakeFetcher(sharedVolumePath string) *Fetcher {
+func MakeFetcher(sharedVolumePath string) (*Fetcher, error) {
 	fissionClient, _, _, err := crd.MakeFissionClient()
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	return &Fetcher{
 		sharedVolumePath: sharedVolumePath,
 		fissionClient:    fissionClient,
-	}
+	}, nil
 }
 
 func downloadUrl(url string, localPath string) error {
