@@ -80,7 +80,6 @@ build_and_push_fetcher() {
     popd
 }
 
-
 build_and_push_builder() {
     image_tag=$1
 
@@ -177,7 +176,7 @@ helm_install_fission() {
     echo "Installing fission"
     helm install		\
 	 --wait			\
-	 --timeout 600	        \
+	 --timeout 540	        \
 	 --name $id		\
 	 --set $helmVars	\
 	 --namespace $ns        \
@@ -226,6 +225,22 @@ wait_for_services() {
     echo "Controller and router services are routable"
 }
 
+dump_kubernetes_events() {
+    id=$1
+    ns=f-$id
+    fns=f-func-$id
+    echo "--- kubectl events $fns ---"
+    kubectl get events -n $fns
+    echo "--- kubectl events $ns ---"
+    kubectl get events -n $ns
+}
+
+dump_tiller_logs() {
+    echo "--- tiller logs ---"
+    tiller_pod=`kubectl get pods -n kube-system | grep tiller| tr -s " "| cut -d" " -f1`
+    kubectl logs $tiller_pod -n kube-system
+}
+
 helm_uninstall_fission() {(set +e
     id=$1
 
@@ -238,6 +253,9 @@ helm_uninstall_fission() {(set +e
     helm delete --purge $id
 
     kubectl delete ns f-$id
+
+    dump_kubernetes_events
+    dump_tiller_logs
 )}
 export -f helm_uninstall_fission
 
@@ -393,6 +411,7 @@ install_and_test() {
     trap "helm_uninstall_fission $id" EXIT
     if ! helm_install_fission $id $image $imageTag $fetcherImage $fetcherImageTag $controllerPort $routerPort $fluentdImage $fluentdImageTag $pruneInterval
     then
+    echo "helm install failed"
 	dump_logs $id
 	exit 1
     fi
