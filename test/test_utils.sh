@@ -494,10 +494,14 @@ install_and_test() {
     then
         # describe each pod in fission ns and function namespace
         describe_all_pods $id
-	exit 1
     fi
 
     show_test_report
+
+    if [ $FAILURES -ne 0 ]
+    then
+	exit 1
+    fi
 }
 
 
