@@ -97,7 +97,7 @@ func (gpm *GenericPoolManager) service() {
 
 				pool, err = MakeGenericPool(
 					gpm.fissionClient, gpm.kubernetesClient, req.env, poolsize,
-					gpm.namespace, gpm.fsCache, gpm.instanceId)
+					req.env.Metadata.Namespace, gpm.fsCache, gpm.instanceId)
 				if err != nil {
 					req.responseChannel <- &response{error: err}
 					continue
@@ -106,15 +106,12 @@ func (gpm *GenericPoolManager) service() {
 			}
 			req.responseChannel <- &response{pool: pool}
 		case CLEANUP_POOLS:
-			latestEnvSet := make(map[string]bool)
 			latestEnvPoolsize := make(map[string]int)
 			for _, env := range req.envList {
-				latestEnvSet[crd.CacheKey(&env.Metadata)] = true
 				latestEnvPoolsize[crd.CacheKey(&env.Metadata)] = int(gpm.getEnvPoolsize(&env))
 			}
 			for key, pool := range gpm.pools {
-				_, ok := latestEnvSet[key]
-				poolsize := latestEnvPoolsize[key]
+				poolsize, ok := latestEnvPoolsize[key]
 				if !ok || poolsize == 0 {
 					// Env no longer exists or pool size changed to zero
 
@@ -122,6 +119,7 @@ func (gpm *GenericPoolManager) service() {
 					delete(gpm.pools, key)
 
 					// and delete the pool asynchronously.
+					// TODO : Come back, may be move it to env delete call? Potential bug.
 					go pool.destroy()
 				}
 			}

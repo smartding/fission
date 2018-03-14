@@ -46,7 +46,13 @@ func (a *API) getIstioServiceLabels(fnName string) map[string]string {
 }
 
 func (a *API) FunctionApiList(w http.ResponseWriter, r *http.Request) {
-	funcs, err := a.fissionClient.Functions(metav1.NamespaceAll).List(metav1.ListOptions{})
+	vars := mux.Vars(r)
+	ns := vars["namespace"]
+	if len(ns) == 0 {
+		ns = metav1.NamespaceAll
+	}
+
+	funcs, err := a.fissionClient.Functions(ns).List(metav1.ListOptions{})
 	if err != nil {
 		a.respondWithError(w, err)
 		return

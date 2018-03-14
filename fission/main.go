@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 
 	"github.com/urfave/cli"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func getFissionNamespace() string {
@@ -64,6 +65,12 @@ func main() {
 		cli.StringFlag{Name: "server", Value: value, Usage: "Fission server URL"},
 	}
 
+	// namespace reference for all objects
+	fnNamespaceFlag := cli.StringFlag{Name: "functionNamespace, fns", Value: metav1.NamespaceDefault, Usage: "namespace for function object"}
+	envNamespaceFlag := cli.StringFlag{Name: "envNamespace, envns", Value: metav1.NamespaceDefault, Usage: "namespace for environment object"}
+	pkgNamespaceFlag := cli.StringFlag{Name: "pkgNamespace, pkgns", Value: metav1.NamespaceDefault, Usage: "namespace for package object"}
+	// TODO : As part of every cli, verify if fission has enough perms to perform any operations in the input namespace.
+
 	// trigger method and url flags (used in function and route CLIs)
 	htMethodFlag := cli.StringFlag{Name: "method", Usage: "HTTP Method: GET|POST|PUT|DELETE|HEAD; defaults to GET"}
 	htUrlFlag := cli.StringFlag{Name: "url", Usage: "URL pattern (See gorilla/mux supported patterns)"}
@@ -102,16 +109,17 @@ func main() {
 	fnExecutorTypeFlag := cli.StringFlag{Name: "executortype", Usage: "Executor type for execution; one of 'poolmgr', 'newdeploy' defaults to 'poolmgr'"}
 	fnSpecSaveFlag := cli.BoolFlag{Name: "spec", Usage: "Save function to the spec directory instead of creating it"}
 
+
 	fnSubcommands := []cli.Command{
-		{Name: "create", Usage: "Create new function (and optionally, an HTTP route to it)", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnSpecSaveFlag, fnCodeFlag, fnPackageFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnEntryPointFlag, fnBuildCmdFlag, fnPkgNameFlag, htUrlFlag, htMethodFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, fnExecutorTypeFlag, targetcpu, fnCfgMapFlag, fnSecretFlag, fnSecretnsFlag, fnCfgMapnsFlag}, Action: fnCreate},
-		{Name: "get", Usage: "Get function source code", Flags: []cli.Flag{fnNameFlag}, Action: fnGet},
-		{Name: "getmeta", Usage: "Get function metadata", Flags: []cli.Flag{fnNameFlag}, Action: fnGetMeta},
-		{Name: "update", Usage: "Update function source code", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag, fnPackageFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnEntryPointFlag, fnPkgNameFlag, fnBuildCmdFlag, fnForceFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, fnExecutorTypeFlag, targetcpu}, Action: fnUpdate},
-		{Name: "delete", Usage: "Delete function", Flags: []cli.Flag{fnNameFlag}, Action: fnDelete},
-		{Name: "list", Usage: "List all functions", Flags: []cli.Flag{}, Action: fnList},
-		{Name: "logs", Usage: "Display function logs", Flags: []cli.Flag{fnNameFlag, fnPodFlag, fnFollowFlag, fnDetailFlag, fnLogDBTypeFlag, fnLogCountFlag}, Action: fnLogs},
-		{Name: "pods", Usage: "Display function pods", Flags: []cli.Flag{fnNameFlag, fnLogDBTypeFlag}, Action: fnPods},
-		{Name: "test", Usage: "Test a function", Flags: []cli.Flag{fnNameFlag, fnEnvNameFlag, fnCodeFlag, fnPackageFlag, fnSrcArchiveFlag, htMethodFlag, fnBodyFlag, fnHeaderFlag}, Action: fnTest},
+		{Name: "create", Usage: "Create new function (and optionally, an HTTP route to it)", Flags: []cli.Flag{fnNameFlag, , fnNamespaceFlag, fnEnvNameFlag, envNamespaceFlag ,fnSpecSaveFlag, fnCodeFlag, fnPackageFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnEntryPointFlag, fnBuildCmdFlag, fnPkgNameFlag, pkgNamespaceFlag, htUrlFlag, htMethodFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, fnExecutorTypeFlag, targetcpu, fnCfgMapFlag, fnSecretFlag, fnSecretnsFlag, fnCfgMapnsFlag}, Action: fnCreate},
+		{Name: "get", Usage: "Get function source code", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag}, Action: fnGet},
+		{Name: "getmeta", Usage: "Get function metadata", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag}, Action: fnGetMeta},
+		{Name: "update", Usage: "Update function source code", Flags: []cli.Flag{fnNameFlag, , fnNamespaceFlag, fnEnvNameFlag, envNamespaceFlag , fnCodeFlag, fnPackageFlag, fnSrcArchiveFlag, fnDeployArchiveFlag, fnEntryPointFlag, fnPkgNameFlag, pkgNamespaceFlag, fnBuildCmdFlag, fnForceFlag, minCpu, maxCpu, minMem, maxMem, minScale, maxScale, fnExecutorTypeFlag, targetcpu}, Action: fnUpdate},
+		{Name: "delete", Usage: "Delete function", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag}, Action: fnDelete},
+		{Name: "list", Usage: "List all functions in a namespace if specified, else, list functions across all namespaces", Flags: []cli.Flag{fnNamespaceFlag}, Action: fnList},
+		{Name: "logs", Usage: "Display function logs", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag, fnPodFlag, fnFollowFlag, fnDetailFlag, fnLogDBTypeFlag, fnLogCountFlag}, Action: fnLogs},
+		{Name: "pods", Usage: "Display function pods", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag, fnLogDBTypeFlag}, Action: fnPods},
+		{Name: "test", Usage: "Test a function", Flags: []cli.Flag{fnNameFlag, fnNamespaceFlag, fnEnvNameFlag, fnCodeFlag, fnPackageFlag, fnSrcArchiveFlag, htMethodFlag, fnBodyFlag, fnHeaderFlag}, Action: fnTest},
 	}
 
 	// httptriggers
@@ -162,11 +170,11 @@ func main() {
 
 	envVersionFlag := cli.IntFlag{Name: "version", Usage: "Environment API version: defaults to 1 (means v1 interface)"}
 	envSubcommands := []cli.Command{
-		{Name: "create", Aliases: []string{"add"}, Usage: "Add an environment", Flags: []cli.Flag{envNameFlag, envPoolsizeFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, minCpu, maxCpu, minMem, maxMem, envVersionFlag, envExternalNetworkFlag}, Action: envCreate},
-		{Name: "get", Usage: "Get environment details", Flags: []cli.Flag{envNameFlag}, Action: envGet},
-		{Name: "update", Usage: "Update environment", Flags: []cli.Flag{envNameFlag, envPoolsizeFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, minCpu, maxCpu, minMem, maxMem, envExternalNetworkFlag}, Action: envUpdate},
-		{Name: "delete", Usage: "Delete environment", Flags: []cli.Flag{envNameFlag}, Action: envDelete},
-		{Name: "list", Usage: "List all environments", Flags: []cli.Flag{}, Action: envList},
+		{Name: "create", Aliases: []string{"add"}, Usage: "Add an environment", Flags: []cli.Flag{envNameFlag, envNamespaceFlag, envPoolsizeFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, minCpu, maxCpu, minMem, maxMem, envVersionFlag, envExternalNetworkFlag}, Action: envCreate},
+		{Name: "get", Usage: "Get environment details", Flags: []cli.Flag{envNameFlag, envNamespaceFlag}, Action: envGet},
+		{Name: "update", Usage: "Update environment", Flags: []cli.Flag{envNameFlag, envNamespaceFlag, envPoolsizeFlag, envImageFlag, envBuilderImageFlag, envBuildCmdFlag, minCpu, maxCpu, minMem, maxMem, envExternalNetworkFlag}, Action: envUpdate},
+		{Name: "delete", Usage: "Delete environment", Flags: []cli.Flag{envNameFlag, envNamespaceFlag}, Action: envDelete},
+		{Name: "list", Usage: "List all environments", Flags: []cli.Flag{envNamespaceFlag}, Action: envList},
 	}
 
 	// watches

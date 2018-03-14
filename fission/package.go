@@ -33,14 +33,14 @@ import (
 	"github.com/fission/fission/crd"
 )
 
-func getFunctionsByPackage(client *client.Client, pkgName string) ([]crd.Function, error) {
+func getFunctionsByPackage(client *client.Client, pkgName, pkgNamespace string) ([]crd.Function, error) {
 	fnList, err := client.FunctionList()
 	if err != nil {
 		return nil, err
 	}
 	fns := []crd.Function{}
 	for _, fn := range fnList {
-		if fn.Spec.Package.PackageRef.Name == pkgName {
+		if fn.Spec.Package.PackageRef.Name == pkgName && fn.Spec.Package.PackageRef.Namespace == pkgNamespace {
 			fns = append(fns, fn)
 		}
 	}
@@ -131,7 +131,7 @@ func pkgUpdate(c *cli.Context) error {
 	return nil
 }
 
-func updatePackage(client *client.Client, pkg *crd.Package, envName,
+func updatePackage(client *client.Client, pkg *crd.Package, envName, envNamespace,
 	srcArchiveName, deployArchiveName, buildcmd string) *metav1.ObjectMeta {
 
 	var srcArchiveMetadata, deployArchiveMetadata *fission.Archive
@@ -139,6 +139,7 @@ func updatePackage(client *client.Client, pkg *crd.Package, envName,
 
 	if len(envName) > 0 {
 		pkg.Spec.Environment.Name = envName
+		pkg.Spec.Environment.Namespace = envNamespace
 		needToBuild = true
 	}
 
@@ -158,6 +159,7 @@ func updatePackage(client *client.Client, pkg *crd.Package, envName,
 		pkg.Spec.Deployment = *deployArchiveMetadata
 	}
 
+	// TODO : Verify by doing a fn update with a source pkg, and see build status goes to pending.
 	// Set package as pending status only when there is no
 	// deploy archive.
 	if needToBuild && len(pkg.Spec.Deployment.Type) == 0 {

@@ -144,7 +144,8 @@ func (deploy *NewDeploy) Run(ctx context.Context) {
 
 func (deploy *NewDeploy) initFuncController() (k8sCache.Store, k8sCache.Controller) {
 	resyncPeriod := 30 * time.Second
-	listWatch := k8sCache.NewListWatchFromClient(deploy.crdClient, "functions", metav1.NamespaceDefault, fields.Everything())
+	// TODO : Come back and see if the ndb functions have a special lable or annotation.
+	listWatch := k8sCache.NewListWatchFromClient(deploy.crdClient, "functions", metav1.NamespaceAll, fields.Everything())
 	store, controller := k8sCache.NewInformer(listWatch, &crd.Function{}, resyncPeriod, k8sCache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			fn := obj.(*crd.Function)
@@ -291,14 +292,14 @@ func (deploy *NewDeploy) fnCreate(fn *crd.Function) (*fscache.FuncSvc, error) {
 	// Since newdeploy waits for pods of deployment to be ready,
 	// change the order of kubeObject creation (create service first,
 	// then deployment) to take advantage of waiting time.
-	svc, err := deploy.createOrGetSvc(deployLabels, objName)
+	svc, err := deploy.createOrGetSvc(deployLabels, objName, fn.Metadata.Namespace)
 	if err != nil {
 		log.Printf("Error creating the service %v: %v", objName, err)
 		return fsvc, err
 	}
 	svcAddress := fmt.Sprintf("%v.%v", svc.Name, svc.Namespace)
 
-	depl, err := deploy.createOrGetDeployment(fn, env, objName, deployLabels)
+	depl, err := deploy.createOrGetDeployment(fn, env, objName, deployLabels, fn.Metadata.Namespace)
 	if err != nil {
 		log.Printf("Error creating the deployment %v: %v", objName, err)
 		return fsvc, err
@@ -434,6 +435,7 @@ func (deploy *NewDeploy) fnUpdate(oldFn *crd.Function, newFn *crd.Function) {
 	if len(oldFn.Spec.Secrets) != len(newFn.Spec.Secrets) {
 		deployChanged = true
 	} else {
+		// TODO : Check with Vishal about the ordering of secrets.
 		for i, newSecret := range newFn.Spec.Secrets {
 			if newSecret != oldFn.Spec.Secrets[i] {
 				deployChanged = true
@@ -493,19 +495,19 @@ func (deploy *NewDeploy) fnDelete(fn *crd.Function) (*fscache.FuncSvc, error) {
 	}
 	objName := fsvc.Name
 
-	err = deploy.deleteDeployment(deploy.namespace, objName)
+	err = deploy.deleteDeployment(fn.Metadata.Namespace, objName)
 	if err != nil {
 		log.Printf("Error deleting the deployment: %v", objName)
 		delError = err
 	}
 
-	err = deploy.deleteSvc(deploy.namespace, objName)
+	err = deploy.deleteSvc(fn.Metadata.Namespace, objName)
 	if err != nil {
 		log.Printf("Error deleting the service: %v", objName)
 		delError = err
 	}
 
-	err = deploy.deleteHpa(deploy.namespace, objName)
+	err = deploy.deleteHpa(fn.Metadata.Namespace, objName)
 	if err != nil {
 		log.Printf("Error deleting the HPA: %v", objName)
 		delError = err

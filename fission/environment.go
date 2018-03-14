@@ -38,6 +38,7 @@ func envCreate(c *cli.Context) error {
 	if len(envName) == 0 {
 		fatal("Need a name, use --name.")
 	}
+	envNamespace := c.String("envNamespace")
 
 	var poolsize int
 	if c.IsSet("poolsize") {
@@ -74,7 +75,7 @@ func envCreate(c *cli.Context) error {
 	env := &crd.Environment{
 		Metadata: metav1.ObjectMeta{
 			Name:      envName,
-			Namespace: metav1.NamespaceDefault,
+			Namespace: envNamespace,
 		},
 		Spec: fission.EnvironmentSpec{
 			Version: envVersion,
@@ -105,10 +106,11 @@ func envGet(c *cli.Context) error {
 	if len(envName) == 0 {
 		fatal("Need a name, use --name.")
 	}
+	envNamespace := c.String("envNamespace")
 
 	m := &metav1.ObjectMeta{
 		Name:      envName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: envNamespace,
 	}
 	env, err := client.EnvironmentGet(m)
 	checkErr(err, "get environment")
@@ -128,6 +130,7 @@ func envUpdate(c *cli.Context) error {
 	if len(envName) == 0 {
 		fatal("Need a name, use --name.")
 	}
+	envNamespace := c.String("envNamespace")
 
 	envImg := c.String("image")
 	envBuilderImg := c.String("builder")
@@ -140,7 +143,7 @@ func envUpdate(c *cli.Context) error {
 
 	env, err := client.EnvironmentGet(&metav1.ObjectMeta{
 		Name:      envName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: envNamespace,
 	})
 	checkErr(err, "find environment")
 
@@ -179,10 +182,11 @@ func envDelete(c *cli.Context) error {
 	if len(envName) == 0 {
 		fatal("Need a name , use --name.")
 	}
+	envNamespace := c.String("envNamespace")
 
 	m := &metav1.ObjectMeta{
 		Name:      envName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: envNamespace,
 	}
 	err := client.EnvironmentDelete(m)
 	checkErr(err, "delete environment")
@@ -193,8 +197,9 @@ func envDelete(c *cli.Context) error {
 
 func envList(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
+	envNamespace := c.String("envNamespace")
 
-	envs, err := client.EnvironmentList()
+	envs, err := client.EnvironmentList(envNamespace)
 	checkErr(err, "list environments")
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)

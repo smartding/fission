@@ -50,14 +50,14 @@ const (
 )
 
 func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Environment,
-	deployName string, deployLabels map[string]string) (*v1beta1.Deployment, error) {
+	deployName string, deployLabels map[string]string, deployNamespace string) (*v1beta1.Deployment, error) {
 
 	replicas := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 	if replicas == 0 {
 		replicas = 1
 	}
 
-	existingDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(deployName, metav1.GetOptions{})
+	existingDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deployNamespace).Get(deployName, metav1.GetOptions{})
 	if err == nil {
 		if existingDepl.Status.ReadyReplicas < replicas {
 			existingDepl, err = deploy.waitForDeploy(existingDepl, replicas)
@@ -72,7 +72,7 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 			return nil, err
 		}
 
-		depl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Create(deployment)
+		depl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deployNamespace).Create(deployment)
 		if err != nil {
 			log.Printf("Error while creating deployment: %v", err)
 			return nil, err
@@ -87,11 +87,11 @@ func (deploy *NewDeploy) createOrGetDeployment(fn *crd.Function, env *crd.Enviro
 
 func (deploy *NewDeploy) getDeployment(fn *crd.Function) (*v1beta1.Deployment, error) {
 	deployName := deploy.getObjName(fn)
-	return deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(deployName, metav1.GetOptions{})
+	return deploy.kubernetesClient.ExtensionsV1beta1().Deployments(fn.Metadata.Namespace).Get(deployName, metav1.GetOptions{})
 }
 
 func (deploy *NewDeploy) updateDeployment(deployment *v1beta1.Deployment) error {
-	_, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Update(deployment)
+	_, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deployment.ObjectMeta.Namespace).Update(deployment)
 	return err
 }
 
@@ -348,7 +348,7 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 	maxRepl := int32(execStrategy.MaxScale)
 	targetCPU := int32(execStrategy.TargetCPUPercent)
 
-	existingHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Get(hpaName, metav1.GetOptions{})
+	existingHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Get(hpaName, metav1.GetOptions{})
 	if err == nil {
 		return existingHpa, err
 	}
@@ -361,7 +361,7 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 		hpa := asv1.HorizontalPodAutoscaler{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      hpaName,
-				Namespace: deploy.namespace,
+				Namespace: depl.ObjectMeta.Namespace,
 				Labels:    depl.Labels,
 			},
 			Spec: asv1.HorizontalPodAutoscalerSpec{
@@ -376,7 +376,7 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 			},
 		}
 
-		cHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Create(&hpa)
+		cHpa, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Create(&hpa)
 		if err != nil {
 			return nil, err
 		}
@@ -389,11 +389,11 @@ func (deploy *NewDeploy) createOrGetHpa(hpaName string, execStrategy *fission.Ex
 
 func (deploy *NewDeploy) getHpa(fn *crd.Function) (*asv1.HorizontalPodAutoscaler, error) {
 	hpaName := deploy.getObjName(fn)
-	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Get(hpaName, metav1.GetOptions{})
+	return deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(fn.Metadata.Namespace).Get(hpaName, metav1.GetOptions{})
 }
 
 func (deploy *NewDeploy) updateHpa(hpa *asv1.HorizontalPodAutoscaler) error {
-	_, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(deploy.namespace).Update(hpa)
+	_, err := deploy.kubernetesClient.AutoscalingV1().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Update(hpa)
 	return err
 }
 
@@ -402,9 +402,9 @@ func (deploy *NewDeploy) deleteHpa(ns string, name string) error {
 	return err
 }
 
-func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName string) (*apiv1.Service, error) {
+func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName string, svcNamespace string) (*apiv1.Service, error) {
 
-	existingSvc, err := deploy.kubernetesClient.CoreV1().Services(deploy.namespace).Get(svcName, metav1.GetOptions{})
+	existingSvc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Get(svcName, metav1.GetOptions{})
 	if err == nil {
 		return existingSvc, err
 	}
@@ -433,7 +433,7 @@ func (deploy *NewDeploy) createOrGetSvc(deployLabels map[string]string, svcName 
 			},
 		}
 
-		svc, err := deploy.kubernetesClient.CoreV1().Services(deploy.namespace).Create(service)
+		svc, err := deploy.kubernetesClient.CoreV1().Services(svcNamespace).Create(service)
 		if err != nil {
 			return nil, err
 		}
@@ -454,7 +454,7 @@ func (deploy *NewDeploy) deleteSvc(ns string, name string) error {
 
 func (deploy *NewDeploy) waitForDeploy(depl *v1beta1.Deployment, replicas int32) (*v1beta1.Deployment, error) {
 	for i := 0; i < 120; i++ {
-		latestDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(deploy.namespace).Get(depl.Name, metav1.GetOptions{})
+		latestDepl, err := deploy.kubernetesClient.ExtensionsV1beta1().Deployments(depl.ObjectMeta.Namespace).Get(depl.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
 		}

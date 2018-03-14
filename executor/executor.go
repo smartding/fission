@@ -119,6 +119,15 @@ func (executor *Executor) serveCreateFuncServices() {
 	}
 }
 
+func (executor *Executor) getFunctionExecutorType(meta *metav1.ObjectMeta) (string, error) {
+	fn, err := executor.fissionClient.Functions(meta.Namespace).Get(meta.Name)
+	if err != nil {
+		return "", err
+	}
+	return string(fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType), nil
+
+}
+
 func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fscache.FuncSvc, error) {
 	log.Printf("[%v] No cached function service found, creating one", meta.Name)
 
@@ -129,14 +138,12 @@ func (executor *Executor) createServiceForFunction(meta *metav1.ObjectMeta) (*fs
 		return nil, err
 	}
 
-	fn, err := executor.fissionClient.
-		Functions(meta.Namespace).
-		Get(meta.Name)
+	executorType, err := executor.getFunctionExecutorType(meta)
 	if err != nil {
 		return nil, err
 	}
 
-	switch fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType {
+	switch executorType {
 	case fission.ExecutorTypeNewdeploy:
 		fs, err := executor.ndm.GetFuncSvc(meta)
 		return fs, err
@@ -204,6 +211,8 @@ func StartExecutor(fissionNamespace string, functionNamespace string, port int) 
 	poolID := strings.ToLower(uniuri.NewLen(8))
 	cleanupObjects(kubernetesClient, functionNamespace, poolID)
 	go idleObjectReaper(kubernetesClient, fissionClient, fsCache, time.Minute*2)
+
+	// TODO : Come back and think of helm upgrades if we remove functionNamespace from these mgr objects.
 	gpm := poolmgr.MakeGenericPoolManager(
 		fissionClient, kubernetesClient, fissionNamespace,
 		functionNamespace, fsCache, poolID)

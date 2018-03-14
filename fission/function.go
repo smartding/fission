@@ -117,6 +117,10 @@ func getTargetCPU(c *cli.Context) int {
 func fnCreate(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
 
+	envNamespace := c.String("envNamespace")
+	pkgNamespace := c.String("pkgNamespace")
+	fnNamespace := c.String("fnNamespace")
+
 	if len(c.String("package")) > 0 {
 		fatal("--package is deprecated, please use --deploy instead.")
 	}
@@ -134,7 +138,8 @@ func fnCreate(c *cli.Context) error {
 		specFile = fmt.Sprintf("function-%v.yaml", fnName)
 	}
 
-	fnList, err := client.FunctionList()
+	// TODO : Check if we need this at all.
+	fnList, err := client.FunctionList(fnNamespace)
 	checkErr(err, "get function list")
 	// check function existence before creating package
 	for _, fn := range fnList {
@@ -157,7 +162,7 @@ func fnCreate(c *cli.Context) error {
 	if len(pkgName) > 0 {
 		// use existing package
 		pkg, err := client.PackageGet(&metav1.ObjectMeta{
-			Namespace: metav1.NamespaceDefault,
+			Namespace: pkgNamespace,
 			Name:      pkgName,
 		})
 		checkErr(err, fmt.Sprintf("read package '%v'", pkgName))
@@ -172,7 +177,7 @@ func fnCreate(c *cli.Context) error {
 
 		// examine existence of given environment
 		_, err := client.EnvironmentGet(&metav1.ObjectMeta{
-			Namespace: metav1.NamespaceDefault,
+			Namespace: envNamespace,
 			Name:      envName,
 		})
 		if err != nil {
@@ -195,8 +200,8 @@ func fnCreate(c *cli.Context) error {
 
 		buildcmd := c.String("buildcmd")
 
-		// create new package
-		pkgMetadata = createPackage(client, envName, srcArchiveName, deployArchiveName, buildcmd, specFile)
+		// create new package in the same namespace as the function.
+		pkgMetadata = createPackage(client, fnNamespace, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd, specFile)
 	}
 
 	invokeStrategy := getInvokeStrategy(c.Int("minscale"), c.Int("maxscale"), c.String("executortype"), getTargetCPU(c))
@@ -234,12 +239,12 @@ func fnCreate(c *cli.Context) error {
 	function := &crd.Function{
 		Metadata: metav1.ObjectMeta{
 			Name:      fnName,
-			Namespace: metav1.NamespaceDefault,
+			Namespace: fnNamespace,
 		},
 		Spec: fission.FunctionSpec{
 			Environment: fission.EnvironmentReference{
 				Name:      envName,
-				Namespace: metav1.NamespaceDefault,
+				Namespace: envNamespace,
 			},
 			Package: fission.FunctionPackageRef{
 				FunctionName: entrypoint,
@@ -282,7 +287,7 @@ func fnCreate(c *cli.Context) error {
 	ht := &crd.HTTPTrigger{
 		Metadata: metav1.ObjectMeta{
 			Name:      triggerName,
-			Namespace: metav1.NamespaceDefault,
+			Namespace: fnNamespace,
 		},
 		Spec: fission.HTTPTriggerSpec{
 			RelativeURL: triggerUrl,
@@ -307,9 +312,10 @@ func fnGet(c *cli.Context) error {
 	if len(fnName) == 0 {
 		fatal("Need name of function, use --name")
 	}
+	fnNamespace := c.String("fnNamespace")
 	m := &metav1.ObjectMeta{
 		Name:      fnName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: fnNamespace,
 	}
 	fn, err := client.FunctionGet(m)
 	checkErr(err, "get function")
@@ -331,10 +337,11 @@ func fnGetMeta(c *cli.Context) error {
 	if len(fnName) == 0 {
 		fatal("Need name of function, use --name")
 	}
+	fnNamespace := c.String("fnNamespace")
 
 	m := &metav1.ObjectMeta{
 		Name:      fnName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: fnNamespace,
 	}
 
 	f, err := client.FunctionGet(m)
@@ -363,20 +370,23 @@ func fnUpdate(c *cli.Context) error {
 	if len(fnName) == 0 {
 		fatal("Need name of function, use --name")
 	}
+	fnNamespace := c.String("fnNamespace")
 
 	function, err := client.FunctionGet(&metav1.ObjectMeta{
 		Name:      fnName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: fnNamespace,
 	})
 	checkErr(err, fmt.Sprintf("read function '%v'", fnName))
 
 	envName := c.String("env")
+	envNamespace := c.String("envNamespace")
 	deployArchiveName := c.String("code")
 	if len(deployArchiveName) == 0 {
 		deployArchiveName = c.String("deploy")
 	}
 	srcArchiveName := c.String("src")
 	pkgName := c.String("pkg")
+	pkgNamespace := c.String("pkgNamespace")
 	entrypoint := c.String("entrypoint")
 	buildcmd := c.String("buildcmd")
 	force := c.Bool("force")
@@ -423,6 +433,7 @@ func fnUpdate(c *cli.Context) error {
 
 	if len(envName) > 0 {
 		function.Spec.Environment.Name = envName
+		function.Spec.Environment.Namespace = envNamespace
 	}
 
 	if len(entrypoint) > 0 {
@@ -430,10 +441,11 @@ func fnUpdate(c *cli.Context) error {
 	}
 	if len(pkgName) == 0 {
 		pkgName = function.Spec.Package.PackageRef.Name
+		pkgNamespace = function.Spec.Package.PackageRef.Namespace
 	}
 
 	pkg, err := client.PackageGet(&metav1.ObjectMeta{
-		Namespace: metav1.NamespaceDefault,
+		Namespace: pkgNamespace,
 		Name:      pkgName,
 	})
 	checkErr(err, fmt.Sprintf("read package '%v'", pkgName))
@@ -441,14 +453,14 @@ func fnUpdate(c *cli.Context) error {
 	pkgMetadata := &pkg.Metadata
 
 	if len(deployArchiveName) != 0 || len(srcArchiveName) != 0 || len(buildcmd) != 0 || len(envName) != 0 {
-		fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name)
+		fnList, err := getFunctionsByPackage(client, pkg.Metadata.Name, pkg.Metadata.Namespace)
 		checkErr(err, "get function list")
 
 		if !force && len(fnList) > 1 {
 			fatal("Package is used by multiple functions, use --force to force update")
 		}
 
-		pkgMetadata = updatePackage(client, pkg, envName, srcArchiveName, deployArchiveName, buildcmd)
+		pkgMetadata = updatePackage(client, pkg, envName, envNamespace, srcArchiveName, deployArchiveName, buildcmd)
 		checkErr(err, fmt.Sprintf("update package '%v'", pkgName))
 
 		fmt.Printf("package '%v' updated\n", pkgMetadata.GetName())
@@ -531,10 +543,11 @@ func fnDelete(c *cli.Context) error {
 	if len(fnName) == 0 {
 		fatal("Need name of function, use --name")
 	}
+	fnNamespace := c.String("fnNamespace")
 
 	m := &metav1.ObjectMeta{
 		Name:      fnName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: fnNamespace,
 	}
 
 	err := client.FunctionDelete(m)
@@ -546,6 +559,7 @@ func fnDelete(c *cli.Context) error {
 
 func fnList(c *cli.Context) error {
 	client := getClient(c.GlobalString("server"))
+	ns := c.String("fnNamespace")
 
 	fns, err := client.FunctionList()
 	checkErr(err, "list functions")
@@ -574,6 +588,7 @@ func fnLogs(c *cli.Context) error {
 	if len(fnName) == 0 {
 		fatal("Need name of function, use --name")
 	}
+	fnNamespace := c.String("fnNamespace")
 
 	dbType := c.String("dbtype")
 	if len(dbType) == 0 {
@@ -583,7 +598,7 @@ func fnLogs(c *cli.Context) error {
 	fnPod := c.String("pod")
 	m := &metav1.ObjectMeta{
 		Name:      fnName,
-		Namespace: metav1.NamespaceDefault,
+		Namespace: fnNamespace,
 	}
 
 	recordLimit := c.Int("recordcount")
@@ -689,6 +704,7 @@ func fnPods(c *cli.Context) error {
 	return err
 }
 
+// TODO : Come back to fix ns.
 func fnTest(c *cli.Context) error {
 	fnName := c.String("name")
 	if len(fnName) == 0 {
